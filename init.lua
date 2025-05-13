@@ -8,7 +8,10 @@ local json = require("json")
 local timer = require("timer")
 
 local RateLimits = {}
+
 local Queue = {}
+
+local timeoutTime = 10
 
 --[[ Utility Functions ]] --
 
@@ -54,9 +57,7 @@ function split(str, delim)
   local n = 1
   while true do
       local i, j = string.find(str, delim, n)
-      if not i then
-          break
-      end
+      if not i then break end
       table.insert(ret, string.sub(str, n, i - 1))
       n = j + 1
   end
@@ -66,15 +67,11 @@ end
 
 local function Error(code, message)
   log(message, "error")
-  return {
-      code = code,
-      message = message
-  }
+  return { code = code, message = message }
 end
 
 local function RateLimited(bucket)
-  if (bucket) and (RateLimits[bucket]) and (RateLimits[bucket].remaining) and (RateLimits[bucket].reset) and
-      (os.time() < RateLimits[bucket].reset) and (RateLimits[bucket].remaining < 1) then
+  if (bucket) and (RateLimits[bucket]) and (RateLimits[bucket].remaining) and (RateLimits[bucket].reset) and (os.time() < RateLimits[bucket].reset) and (RateLimits[bucket].remaining < 1) then
       return true
   else
       return false
@@ -86,8 +83,7 @@ local function updateRateLimit(result, bucket)
   local rateLimitRemaining = getHeader(result, "X-RateLimit-Remaining")
   local rateLimitReset = getHeader(result, "X-RateLimit-Reset")
 
-  if rateLimitBucket and rateLimitRemaining and rateLimitReset and tonumber(rateLimitRemaining) and
-      tonumber(rateLimitReset) then
+  if rateLimitBucket and rateLimitRemaining and rateLimitReset and tonumber(rateLimitRemaining) and tonumber(rateLimitReset) then
       RateLimits[rateLimitBucket] = {
           remaining = tonumber(rateLimitRemaining),
           reset = tonumber(rateLimitReset) + 0.2
@@ -109,9 +105,9 @@ local function getBucket(method, serverkey, globalkey)
   return bucket
 end
 
-local junkletters = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
-                   "U", "V", "W", "X", "Y", "Z"}
-local junknums = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}
+local junkletters = { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+  "U", "V", "W", "X", "Y", "Z" }
+local junknums = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" }
 
 local function junkStr(len)
   local str = ""
@@ -153,92 +149,146 @@ function erlua:request(method, endpoint, body, serverkey, globalkey)
   local headers = {}
 
   if (not serverkey) and (not erlua.ServerKey) then
-      return false, Error(400, "A server key was not provided to " .. method .. " /" .. endpoint .. ".")
+    return false, Error(400, "A server key was not provided to " .. method .. " /" .. endpoint .. ".")
   else
-      table.insert(headers, {"Server-Key", serverkey or erlua.ServerKey})
+    table.insert(headers, { "Server-Key", serverkey or erlua.ServerKey })
   end
 
   local bucket = getBucket(method, serverkey, globalkey)
 
   if RateLimited(bucket) then
-      log("Bucket " .. bucket:sub(1, 7) .. " is being ratelimited.", "warning")
-      if bucket:sub(1, 7) == "command" then
-          log("Queuing command post request.", "warning")
+    log("Bucket " .. bucket:sub(1, 7) .. " is being ratelimited.", "warning")
+    if bucket:sub(1, 7) == "command" then
+      log("Queuing command post request.", "warning")
 
-          local id = junkStr(10)
+      local id = junkStr(10)
 
-          Queue[bucket] = Queue[bucket] or {
-              active = false,
-              requests = {}
-          }
+      Queue[bucket] = Queue[bucket] or { active = false, requests = {} }
 
-          table.insert(Queue[bucket].requests, id)
+      table.insert(Queue[bucket].requests, id)
 
-          repeat
-              timer.sleep(20)
-          until (Queue[bucket].requests[1] == id) and not RateLimited(bucket) and not Queue[bucket].active
+      local startTime = os.time()
 
-          Queue[bucket].active = true
+      repeat
+        timer.sleep(20)
+      until ((Queue[bucket].requests[1] == id) and not RateLimited(bucket) and not Queue[bucket].active) or os.time() - startTime >= timeoutTime
 
-          table.remove(Queue[bucket].requests, 1)
+      if os.time() - startTime >= timeoutTime then
+        for i, req in ipairs(Queue[bucket].requests) do
+            if req == id then
+                table.remove(Queue[bucket].requests, i)
+                break
+            end
+        end
+        return false, Error(4001, "Queued command post requested timed-out.")
+    end
 
-          log("Executing ratelimited request " .. id, "info")
+      Queue[bucket].active = true
 
-          local success, response = self:request(method, endpoint, body, serverkey, globalkey)
+      table.remove(Queue[bucket].requests, 1)
 
-          Queue[bucket].active = false
+      log("Executing ratelimited request " .. id, "info")
 
-          return success, response
-      else
-          return false, Error(4001, "The resource is being ratelimited.")
-      end
+      local success, response = self:request(method, endpoint, body, serverkey, globalkey)
+
+      Queue[bucket].active = false
+
+      return success, response
+    else
+      return false, Error(4001, "The resource is being ratelimited.")
+    end
   end
 
+
   if globalkey or erlua.GlobalKey then
-      table.insert(headers, {"Authorization", globalkey or erlua.GlobalKey})
+    table.insert(headers, { "Authorization", globalkey or erlua.GlobalKey })
   end
 
   if method == "POST" then
-      table.insert(headers, {"Content-Type", "application/json"})
+    table.insert(headers, { "Content-Type", "application/json" })
   end
 
   if type(body) == "table" then
-      local success, encoded = pcall(json.encode, body)
+    local success, encoded = pcall(json.encode, body)
 
-      if not success then
-          return false, Error(500, "Body could not be encoded.")
-      else
-          body = encoded
-      end
+    if not success then
+      return false, Error(500, "Body could not be encoded.")
+    else
+      body = encoded
+    end
   end
 
-  local result, response = http.request(method, url, headers, body)
+  local _, result, response = pcall(function()
+    return http.request(method, url, headers, body, {
+        timeout = 2500,
+        followRedirects = true
+    })
+  end)
 
   if type(response) == "string" then
-      local success, decoded = pcall(json.decode, response)
+    local success, decoded = pcall(json.decode, response)
 
-      if not success then
-          return false, Error(500, "Response could not be decoded.")
-      else
-          response = decoded
-      end
+    if not success then
+      return false, Error(500, "Response could not be decoded.")
+    else
+      response = decoded
+    end
   end
 
   updateRateLimit(result, bucket)
 
   if result.code == 200 then
-      return true, response
+    return true, response
   elseif result.code == 404 then
-      return false, Error(404, "Endpoint /" .. endpoint .. " was not found. (" .. url .. ")")
+    return false, Error(404, "Endpoint /" .. endpoint .. " was not found. (" .. url .. ")")
   elseif response and response.code == 4001 then
-      log("PRC API returned a ratelimit.", "error")
-      return false, Error(result.code, result.reason)
+    log("PRC API returned a ratelimit on bucket: " .. bucket:sub(1, 7), "error")
+    if bucket:sub(1, 7) == "command" then
+      log("Queuing command post request.", "warning")
+
+      local id = junkStr(10)
+
+      Queue[bucket] = Queue[bucket] or { active = false, requests = {} }
+
+      table.insert(Queue[bucket].requests, id)
+
+      local startTime = os.time()
+      
+      repeat
+          timer.sleep(20)
+      until ((Queue[bucket].requests[1] == id) and not RateLimited(bucket) and not Queue[bucket].active) 
+          or (os.time() - startTime >= timeoutTime)
+      
+      if os.time() - startTime >= timeoutTime then
+          for i, req in ipairs(Queue[bucket].requests) do
+              if req == id then
+                  table.remove(Queue[bucket].requests, i)
+                  break
+              end
+          end
+          return false, Error(4001, "Queued command post requested timed-out.")
+      end
+
+      Queue[bucket].active = true
+
+      table.remove(Queue[bucket].requests, 1)
+
+      log("Executing ratelimited request " .. id, "info")
+
+      local success, response = self:request(method, endpoint, body, serverkey, globalkey)
+
+      Queue[bucket].active = false
+
+      return success, response
+    else
+      return false, Error(4001, "The resource is being ratelimited.")
+    end
   elseif response and response.code then
-      return false, response
+    return false, response
   elseif result.code and result.reason then
-      return false, Error(result.code, result.reason)
+    return false, Error(result.code, result.reason)
   else
-      return false, Error(444, "The PRC API did not respond.")
+    return false, Error(444, "The PRC API did not respond.")
   end
 end
 
@@ -288,7 +338,7 @@ function erlua.PlayerLogs(serverKey, globalKey)
       if (not a.Timestamp) or (not b.Timestamp) then
           return false
       else
-          return a.Timestamp > b.Timestamp
+          return a.Timestamp < b.Timestamp
       end
   end)
 
@@ -306,7 +356,7 @@ function erlua.KillLogs(serverKey, globalKey)
       if (not a.Timestamp) or (not b.Timestamp) then
           return false
       else
-          return a.Timestamp > b.Timestamp
+          return a.Timestamp < b.Timestamp
       end
   end)
 
@@ -320,13 +370,15 @@ function erlua.CommandLogs(serverKey, globalKey)
       return false, response
   end
 
-  return true, table.sort(response, function(a, b)
+  table.sort(response, function(a, b)
       if (not a.Timestamp) or (not b.Timestamp) then
           return false
       else
-          return a.Timestamp > b.Timestamp
+          return a.Timestamp < b.Timestamp
       end
   end)
+
+  return true, response
 end
 
 function erlua.ModCalls(serverKey, globalKey)
@@ -340,7 +392,7 @@ function erlua.ModCalls(serverKey, globalKey)
       if (not a.Timestamp) or (not b.Timestamp) then
           return false
       else
-          return a.Timestamp > b.Timestamp
+          return a.Timestamp < b.Timestamp
       end
   end)
 
@@ -383,8 +435,9 @@ function erlua.Staff(serverKey, globalKey, preloadPlayers)
 end
 
 function erlua.Team(teamName, serverKey, globalKey, preloadPlayers)
-  if (not teamName) or (not table.find({"civilian", "police", "sheriff", "fire", "dot", "jail"}, teamName:lower())) then
-      return Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided.")
+  if (not teamName) or (not table.find({ "civilian", "police", "sheriff", "fire", "dot", "jail" }, teamName:lower())) then
+      return
+          Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided.")
   end
 
   local team = {}
@@ -397,6 +450,7 @@ function erlua.Team(teamName, serverKey, globalKey, preloadPlayers)
   else
       success, players = erlua.Players(serverKey, globalKey)
   end
+
 
   if not players then
       return false, players
@@ -423,14 +477,13 @@ function erlua.TrollUsernames(serverKey, globalKey, preloadPlayers)
       success, players = erlua.Players(serverKey, globalKey)
   end
 
+
   if not players then
       return false, players
   end
 
   for _, player in pairs(players) do
-      if (player.Player) and
-          ((player.Player:sub(1, 3):lower() == "all") or (player.Player:sub(1, 6):lower() == "others") or
-              (player.Player:find("lI") or (player.Player:find("Il")))) then
+      if (player.Player) and ((player.Player:sub(1, 3):lower() == "all") or (player.Player:sub(1, 6):lower() == "others") or (player.Player:find("lI") or (player.Player:find("Il")))) then
           table.insert(trolls, player)
       end
   end
@@ -439,9 +492,11 @@ function erlua.TrollUsernames(serverKey, globalKey, preloadPlayers)
 end
 
 function erlua.Command(command, serverKey, globalKey)
-  return erlua:request("POST", "server/command", {
-      command = command
-  }, serverKey, globalKey)
+  if command:sub(1,1) ~= ":" then
+    command = ":" .. command
+  end
+
+  return erlua:request("POST", "server/command", { command = command }, serverKey, globalKey)
 end
 
 return erlua
