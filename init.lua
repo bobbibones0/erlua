@@ -483,9 +483,20 @@ function erlua.TrollUsernames(serverKey, globalKey, preloadPlayers)
   end
 
   for _, player in pairs(players) do
-      if (player.Player) and ((player.Player:sub(1, 3):lower() == "all") or (player.Player:sub(1, 6):lower() == "others") or (player.Player:find("lI") or (player.Player:find("Il")))) then
-          table.insert(trolls, player)
+    local name = player.Player
+    if name then
+      local lname = name:lower()
+      local startsWithAll = lname:sub(1, 3) == "all"
+      local startsWithOthers = lname:sub(1, 6) == "others"
+
+      local countIl = select(2, name:gsub("Il", ""))
+      local countlI = select(2, name:gsub("lI", ""))
+      local total = countIl + countlI
+
+      if startsWithAll or startsWithOthers or total >= 2 then
+        table.insert(trolls, player)
       end
+    end
   end
 
   return true, trolls
