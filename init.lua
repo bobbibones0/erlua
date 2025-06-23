@@ -8,6 +8,7 @@ local json = require("json")
 local timer = require("timer")
 
 local RateLimits = {}
+_G.ERLUARateLimits = RateLimits
 
 local Queue = {}
 
@@ -89,6 +90,8 @@ local function updateRateLimit(result, bucket)
           reset = tonumber(rateLimitReset) + 0.2
       }
   end
+
+  _G.ERLUARateLimits = RateLimits
 end
 
 local function getBucket(method, serverkey, globalkey)
