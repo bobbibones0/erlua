@@ -1,6 +1,6 @@
 local erlua = {
 	GlobalKey = nil,
-	serverKey = nil
+	ServerKey = nil
 }
 
 local http = require("coro-http")
