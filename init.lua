@@ -1,49 +1,71 @@
 local erlua = {
-  GlobalKey = nil,
-  ServerKey = nil
+	GlobalKey = nil,
+	serverKey = nil
 }
 
 local http = require("coro-http")
 local json = require("json")
 local timer = require("timer")
 
+<<<<<<< Updated upstream
 local RateLimits = {}
 _G.ERLUARateLimits = RateLimits
 
+=======
+>>>>>>> Stashed changes
 local Queue = {}
+local Ratelimits = {}
 
+<<<<<<< Updated upstream
 local timeoutTime = 10
 
 --[[ Utility Functions ]] --
+=======
+--[[
+if not success or type(response) ~= "table" or response.code then
+  return false, response
+end
+]]
+
+--[[ Utility Functions ]]
+--
+>>>>>>> Stashed changes
 
 local function log(text, mode)
-  mode = mode or "info"
+	mode = mode or "info"
 
-  local date = os.date("%x @ %I:%M:%S%p", os.time())
+	local date = os.date("%x @ %I:%M:%S%p", os.time())
 
-  if mode == "success" then
-      print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
-  elseif mode == "warning" then
-      print(date .. " | \27[33m\27[1m[ERLUA]\27[0m | " .. text)
-  elseif mode == "error" then
-      print(date .. " | \27[31m\27[1m[ERLUA]\27[0m | " .. text)
-  elseif mode == "info" then
-      print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
-  end
+	if mode == "success" then
+		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
+	elseif mode == "warning" then
+		print(date .. " | \27[33m\27[1m[ERLUA]\27[0m | " .. text)
+	elseif mode == "error" then
+		print(date .. " | \27[31m\27[1m[ERLUA]\27[0m | " .. text)
+	elseif mode == "info" then
+		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
+	end
 end
 
-local function getHeader(headers, name)
-  if (not headers) or (type(headers) ~= "table") or (not name) or (name == "") then
-      return
-  end
-
-  for _, header in pairs(headers) do
-      if (type(header) == "table") and (header[1]:lower() == name:lower()) then
-          return header[2]
-      end
-  end
+local function split(str, delim)
+	local ret = {}
+	if not str then return ret end
+	if not delim or delim == "" then
+		for c in string.gmatch(str, ".") do table.insert(ret, c) end
+		return ret
+	end
+	local n = 1
+	while true do
+		local i, j = string.find(str, delim, n)
+		if not i then break end
+		table.insert(ret, string.sub(str, n, i - 1))
+		n = j + 1
+	end
+	table.insert(ret, string.sub(str, n))
+	return ret
 end
 
+<<<<<<< Updated upstream
 function split(str, delim)
   local ret = {}
   if not str then
@@ -131,34 +153,71 @@ local function junkStr(len)
   end
 
   return str
+=======
+local function header(headers, name) for _, header in pairs(headers) do if header[1]:lower() == name:lower() then return header[2] end end end
+
+local function realtime()
+	local seconds, microseconds = uv.gettimeofday()
+
+	return seconds + (microseconds / 1000000)
+end
+
+local function Error(code, message)
+	log(message, "error")
+	return {
+		code = code,
+		message = message
+	}
+>>>>>>> Stashed changes
 end
 
 -- [[ ERLua Functions ]] --
 
 function erlua:SetGlobalKey(gk)
-  erlua.GlobalKey = gk
-  log("Set global key to [HIDDEN].", "info")
-  return erlua
+	erlua.GlobalKey = gk
+	log("Set global key to [HIDDEN].", "info")
+	return erlua
 end
 
 function erlua:SetServerKey(sk)
-  erlua.ServerKey = sk
-  log("Set server key to [HIDDEN].", "info")
-  return erlua
+	erlua.ServerKey = sk
+	log("Set server key to [HIDDEN].", "info")
+	return erlua
 end
 
-function erlua:request(method, endpoint, body, serverkey, globalkey)
-  local url = "https://api.policeroleplay.community/v1/" .. endpoint
-  local headers = {}
+function erlua:request(method, endpoint, body, callback, process, serverKey, globalKey)
+	serverKey = (serverKey or erlua.ServerKey) or nil
+	globalKey = (globalKey or erlua.GlobalKey) or nil
+	if not serverKey then return false, Error(400, "A server key was not provided.") end
 
+<<<<<<< Updated upstream
   if (not serverkey) and (not erlua.ServerKey) then
     return false, Error(400, "A server key was not provided to " .. method .. " /" .. endpoint .. ".")
   else
     table.insert(headers, { "Server-Key", serverkey or erlua.ServerKey })
   end
+=======
+	local url = "https://api.policeroleplay.community/v1/" .. endpoint
+	local headers = {
+		{
+			"Content-Type",
+			"application/json"
+		}
+	}
+>>>>>>> Stashed changes
 
-  local bucket = getBucket(method, serverkey, globalkey)
+	table.insert(headers, {
+		"Server-Key",
+		serverKey
+	})
+	if globalKey then
+		table.insert(headers, {
+			"Authorization",
+			globalKey
+		})
+	end
 
+<<<<<<< Updated upstream
   if RateLimited(bucket) then
     log("Bucket " .. bucket:sub(1, 7) .. " is being ratelimited.", "warning")
     if bucket:sub(1, 7) == "command" then
@@ -293,82 +352,163 @@ function erlua:request(method, endpoint, body, serverkey, globalkey)
   else
     return false, Error(444, "The PRC API did not respond.")
   end
+=======
+	local result, response = http.request(method, url, headers, (body and json.decode(body)) or nil)
+	response = response and json.decode(response)
+
+	if result.code == 200 then
+		if process then response = process(response) end
+
+		callback(true, response, result)
+		return true, result, response
+	else
+		callback(false, response, result)
+		return false, result, response
+	end
+>>>>>>> Stashed changes
 end
+
+function erlua:queue(request)
+	log("Request " .. request.method .. " /" .. request.endpoint .. " queued.", "info")
+	request.timestamp = request.timestamp or os.time()
+
+	table.insert(Queue, request)
+	return #Queue
+end
+
+function erlua:dump()
+	log("Scanning queue for a runnable request...", "info")
+	table.sort(Queue, function(a, b) return a.timestamp < b.timestamp end)
+
+	local now = realtime()
+	local idx, req, state
+
+	for i, oldest in ipairs(Queue) do
+		local b = (oldest.method == "POST" and "bucket-" .. oldest.serverKey) or (oldest.globalKey and "global") or "unauthenticated-global"
+		state = Ratelimits[b]
+
+		if not (state and state.updated and state.retry and now < (state.updated + state.retry)) then
+			idx = i
+			req = oldest
+			break
+		end
+	end
+
+	if not req then
+		local soonest = math.huge
+		for _, state in pairs(Ratelimits) do
+			if state.updated and state.retry then
+				local unblock = state.updated + state.retry
+				if unblock > now and unblock < soonest then soonest = unblock end
+			end
+		end
+		if soonest < math.huge then
+			local wait = soonest - now
+			log("All buckets have been ratelimited, sleeping for " .. wait .. " seconds.", "warning")
+			timer.sleep(wait * 1000)
+		end
+		return
+	end
+
+	local ok, result, response = erlua:request(req.method, req.endpoint, req.body, req.callback, req.process, req.serverKey, req.globalKey)
+
+	local headers = result.headers or {}
+	local bucket = header(headers, "X-RateLimit-Bucket")
+	local remaining = header(headers, "X-RateLimit-Remaining")
+	local reset = header(headers, "X-RateLimit-Reset")
+
+	if bucket and remaining and reset then
+		Ratelimits[bucket] = {
+			updated = realtime(),
+			retry = response and response.retry_after,
+			remaining = tonumber(remaining),
+			reset = tonumber(reset)
+		}
+		log("The " .. bucket .. "bucket has been updated: " .. remaining .. " left, resets in " .. (reset - os.time()) .. " seconds.")
+	end
+
+	if not ok and result.code == 429 then
+		log("The " .. (bucket or "unknown") .. " bucket has been ratelimited, requeueing request.", "warning")
+	else
+		table.remove(Queue, idx)
+	end
+end
+
+coroutine.wrap(function()
+	while true do
+		if #Queue > 0 then erlua:dump() end
+
+		timer.sleep(500)
+	end
+end)()
 
 -- [[ Endpoint Functions ]] --
 
-function erlua.Server(serverKey, globalKey)
-  return erlua:request("GET", "server", nil, serverKey, globalKey)
+function erlua.Server(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback
+	})
 end
 
-function erlua.Players(serverKey, globalKey)
-  local players = {}
+function erlua.Players(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/players",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback,
+		process = function(data)
+			local players = {}
 
-  local success, response = erlua:request("GET", "server/players", nil, serverKey, globalKey)
+			for _, player in pairs(data) do
+				if player.Player then
+					table.insert(players, {
+						Name = split(player.Player, ":")[1],
+						ID = split(player.Player, ":")[2],
+						Player = player.Player,
+						Permission = player.Permission,
+						Callsign = player.Callsign,
+						Team = player.Team
+					})
+				end
+			end
 
-  if not success or type(response) ~= "table" or response.code then
-      return false, response
-  end
-
-  for _, player in pairs(response) do
-      if player.Player then
-          table.insert(players, {
-              Name = split(player.Player, ":")[1],
-              ID = split(player.Player, ":")[2],
-              Player = player.Player,
-              Permission = player.Permission,
-              Callsign = player.Callsign,
-              Team = player.Team
-          })
-      end
-  end
-
-  return true, players
+			return players
+		end
+	})
 end
 
-function erlua.Vehicles(serverKey, globalKey)
-  return erlua:request("GET", "server/vehicles", nil, serverKey, globalKey)
+function erlua.Vehicles(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/vehicles",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback
+	})
 end
 
-function erlua.PlayerLogs(serverKey, globalKey)
-  local success, response = erlua:request("GET", "server/joinlogs", nil, serverKey, globalKey)
+function erlua.PlayerLogs(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/joinlogs",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback,
+		process = function(data)
+			table.sort(data, function(a, b)
+				if (not a.Timestamp) or not b.Timestamp then
+					return false
+				else
+					return a.Timestamp < b.Timestamp
+				end
+			end)
 
-  if not success or type(response) ~= "table" or response.code then
-      return false, response
-  end
-
-  table.sort(response, function(a, b)
-      if (not a.Timestamp) or (not b.Timestamp) then
-          return false
-      else
-          return a.Timestamp < b.Timestamp
-      end
-  end)
-
-  return true, response
-end
-
-function erlua.KillLogs(serverKey, globalKey)
-  local success, response = erlua:request("GET", "server/killlogs", nil, serverKey, globalKey)
-
-  if not success or type(response) ~= "table" or response.code then
-      return false, response
-  end
-
-  table.sort(response, function(a, b)
-      if (not a.Timestamp) or (not b.Timestamp) then
-          return false
-      else
-          return a.Timestamp < b.Timestamp
-      end
-  end)
-
-  return true, response
-end
-
-function erlua.CommandLogs(serverKey, globalKey)
-  local success, response = erlua:request("GET", "server/commandlogs", nil, serverKey, globalKey)
-
+<<<<<<< Updated upstream
   if not success or type(response) ~= "table" or response.code then
       return false, response
   end
@@ -382,11 +522,30 @@ function erlua.CommandLogs(serverKey, globalKey)
   end)
 
   return true, response
+=======
+			return data
+		end
+	})
+>>>>>>> Stashed changes
 end
 
-function erlua.ModCalls(serverKey, globalKey)
-  local success, response = erlua:request("GET", "server/modcalls", nil, serverKey, globalKey)
+function erlua.KillLogs(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/killlogs",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback,
+		process = function(data)
+			table.sort(data, function(a, b)
+				if (not a.Timestamp) or not b.Timestamp then
+					return false
+				else
+					return a.Timestamp < b.Timestamp
+				end
+			end)
 
+<<<<<<< Updated upstream
   if not success or type(response) ~= "table" or response.code then
       return false, response
   end
@@ -400,60 +559,161 @@ function erlua.ModCalls(serverKey, globalKey)
   end)
 
   return true, response
+=======
+			return data
+		end
+	})
+>>>>>>> Stashed changes
 end
 
-function erlua.Bans(serverKey, globalKey)
-  return erlua:request("GET", "server/bans", nil, serverKey, globalKey)
+function erlua.CommandLogs(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/commandlogs",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback,
+		process = function(data)
+			table.sort(data, function(a, b)
+				if (not a.Timestamp) or not b.Timestamp then
+					return false
+				else
+					return a.Timestamp < b.Timestamp
+				end
+			end)
+
+<<<<<<< Updated upstream
+  if not success or type(response) ~= "table" or response.code then
+      return false, response
+  end
+
+  table.sort(response, function(a, b)
+      if (not a.Timestamp) or (not b.Timestamp) then
+          return false
+      else
+          return a.Timestamp < b.Timestamp
+      end
+  end)
+
+  return true, response
+=======
+			return data
+		end
+	})
+>>>>>>> Stashed changes
 end
 
-function erlua.Queue(serverKey, globalKey)
-  return erlua:request("GET", "server/queue", nil, serverKey, globalKey)
+function erlua.ModCalls(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/modcalls",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback,
+		process = function(data)
+			table.sort(data, function(a, b)
+				if (not a.Timestamp) or not b.Timestamp then
+					return false
+				else
+					return a.Timestamp < b.Timestamp
+				end
+			end)
+
+<<<<<<< Updated upstream
+  if not success or type(response) ~= "table" or response.code then
+      return false, response
+  end
+
+  table.sort(response, function(a, b)
+      if (not a.Timestamp) or (not b.Timestamp) then
+          return false
+      else
+          return a.Timestamp < b.Timestamp
+      end
+  end)
+
+  return true, response
+=======
+			return data
+		end
+	})
+>>>>>>> Stashed changes
+end
+
+function erlua.Bans(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/bans",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback
+	})
+end
+
+function erlua.Queue(callback, serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/queue",
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback
+	})
 end
 
 -- [[ Custom Functions ]] --
 
-function erlua.Staff(serverKey, globalKey, preloadPlayers)
-  local staff = {}
+function erlua.Staff(callback, serverKey, globalKey, preloadPlayers)
+	local function process(success, response)
+		if success and response then
+			local staff = {}
 
-  local success, players
+			for _, player in pairs(response) do if player.Permission and (player.Permission ~= "Normal") then table.insert(staff, player) end end
 
-  if preloadPlayers then
-      success = true
-      players = preloadPlayers
-  else
-      success, players = erlua.Players(serverKey, globalKey)
-  end
+			callback(success, staff)
+		else
+			callback(success, response)
+		end
+	end
 
-  if not players then
-      return false, players
-  end
-
-  for _, player in pairs(players) do
-      if (player.Permission) and (player.Permission ~= "Normal") then
-          table.insert(staff, player)
-      end
-  end
-
-  return true, staff
+	if preloadPlayers then
+		process(true, preloadPlayers)
+		return 0
+	else
+		return erlua.Players(process, serverKey, globalKey)
+	end
 end
 
+<<<<<<< Updated upstream
 function erlua.Team(teamName, serverKey, globalKey, preloadPlayers)
   if (not teamName) or (not table.find({ "civilian", "police", "sheriff", "fire", "dot", "jail" }, teamName:lower())) then
       return
           Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided.")
   end
+=======
+function erlua.Team(callback, teamName, serverKey, globalKey, preloadPlayers)
+	if not teamName or (not table.find({
+		"civilian",
+		"police",
+		"sheriff",
+		"fire",
+		"dot",
+		"jail"
+	}, teamName:lower())) then callback(false, Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided.")) end
+>>>>>>> Stashed changes
 
-  local team = {}
+	local function process(success, response)
+		if success and response then
+			local team = {}
 
-  local success, players
+			for _, player in pairs(response) do if player.Team and (player.Team:lower() == teamName:lower()) then table.insert(team, player) end end
 
-  if preloadPlayers then
-      success = true
-      players = preloadPlayers
-  else
-      success, players = erlua.Players(serverKey, globalKey)
-  end
+			callback(success, team)
+		else
+			callback(success, response)
+		end
+	end
 
+<<<<<<< Updated upstream
 
   if not players then
       return false, players
@@ -466,20 +726,33 @@ function erlua.Team(teamName, serverKey, globalKey, preloadPlayers)
   end
 
   return true, team
+=======
+	if preloadPlayers then
+		process(true, preloadPlayers)
+		return 0
+	else
+		return erlua.Players(process, serverKey, globalKey)
+	end
+>>>>>>> Stashed changes
 end
 
-function erlua.TrollUsernames(serverKey, globalKey, preloadPlayers)
-  local trolls = {}
+function erlua.TrollUsernames(callback, serverKey, globalKey, preloadPlayers)
+	local function process(success, response)
+		if success and response then
+			local trolls = {}
 
-  local success, players
+			for _, player in pairs(response) do
+				local name = player.Player
+				if name then
+					local lname = name:lower()
+					local startsWithAll = lname:sub(1, 3) == "all"
+					local startsWithOthers = lname:sub(1, 6) == "others"
 
-  if preloadPlayers then
-      success = true
-      players = preloadPlayers
-  else
-      success, players = erlua.Players(serverKey, globalKey)
-  end
+					local countIl = select(2, name:gsub("Il", ""))
+					local countlI = select(2, name:gsub("lI", ""))
+					local total = countIl + countlI
 
+<<<<<<< Updated upstream
 
   if not players then
       return false, players
@@ -501,16 +774,46 @@ function erlua.TrollUsernames(serverKey, globalKey, preloadPlayers)
       end
     end
   end
+=======
+					if startsWithAll or startsWithOthers or total >= 2 then table.insert(trolls, player) end
+				end
+			end
 
-  return true, trolls
+			callback(success, response)
+		else
+			callback(success, response)
+		end
+	end
+>>>>>>> Stashed changes
+
+	if preloadPlayers then
+		process(true, preloadPlayers)
+		return 0
+	else
+		return erlua.Players(process, serverKey, globalKey)
+	end
 end
 
+<<<<<<< Updated upstream
 function erlua.Command(command, serverKey, globalKey)
   if command:sub(1,1) ~= ":" then
     command = ":" .. command
   end
 
   return erlua:request("POST", "server/command", { command = command }, serverKey, globalKey)
+=======
+function erlua.Command(callback, command, serverKey, globalKey)
+	return erlua:queue({
+		method = "POST",
+		endpoint = "server/command",
+		body = {
+			command = (command:sub(1, 1) == ":" and command) or (":" .. command)
+		},
+		serverKey = serverKey,
+		globalkey = globalKey,
+		callback = callback
+	})
+>>>>>>> Stashed changes
 end
 
 return erlua
