@@ -84,6 +84,7 @@ function erlua:SetServerKey(sk)
 end
 
 function erlua:request(method, endpoint, body, callback, process, serverKey, globalKey)
+	callback = callback or function() end
 	serverKey = (serverKey or erlua.ServerKey) or nil
 	globalKey = (globalKey or erlua.GlobalKey) or nil
 	if not serverKey then return false, Error(400, "A server key was not provided.") end
