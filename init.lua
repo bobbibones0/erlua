@@ -351,7 +351,7 @@ end
 
 -- [[ Custom Functions ]] --
 
-function erlua.Staff(callback, serverKey, globalKey, preloadPlayers)
+function erlua.Staff(callback, preloadPlayers, serverKey, globalKey)
 	local function process(success, response)
 		if success and response then
 			local staff = {}
@@ -372,7 +372,7 @@ function erlua.Staff(callback, serverKey, globalKey, preloadPlayers)
 	end
 end
 
-function erlua.Team(callback, teamName, serverKey, globalKey, preloadPlayers)
+function erlua.Team(teamName, callback, preloadPlayers, serverKey, globalKey)
 	if not teamName or (not table.find({
 		"civilian",
 		"police",
@@ -402,7 +402,7 @@ function erlua.Team(callback, teamName, serverKey, globalKey, preloadPlayers)
 	end
 end
 
-function erlua.TrollUsernames(callback, serverKey, globalKey, preloadPlayers)
+function erlua.TrollUsernames(callback, preloadPlayers, serverKey, globalKey)
 	local function process(success, response)
 		if success and response then
 			local trolls = {}
@@ -436,7 +436,7 @@ function erlua.TrollUsernames(callback, serverKey, globalKey, preloadPlayers)
 	end
 end
 
-function erlua.Command(callback, command, serverKey, globalKey)
+function erlua.Command(command, callback, serverKey, globalKey)
 	return erlua:queue({
 		method = "POST",
 		endpoint = "server/command",
