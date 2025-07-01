@@ -199,7 +199,7 @@ coroutine.wrap(function()
 	while true do
 		if #erlua.Requests > 0 then erlua:dump() end
 
-		timer.sleep(100)
+		timer.sleep(5)
 	end
 end)()
 
