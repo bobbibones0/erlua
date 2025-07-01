@@ -1,16 +1,13 @@
 local erlua = {
 	GlobalKey = nil,
-	ServerKey = nil
+	ServerKey = nil,
+	Queue = {},
+	Ratelimits = {}
 }
 
 local http = require("coro-http")
 local json = require("json")
 local timer = require("timer")
-
-local Queue = {}
-local Ratelimits = {}
-
-_G.ERLUARateLimits = Ratelimits
 
 --[[
 if not success or type(response) ~= "table" or response.code then
@@ -132,20 +129,20 @@ function erlua:queue(request)
 	log("Request " .. request.method .. " /" .. request.endpoint .. " queued.", "info")
 	request.timestamp = request.timestamp or os.time()
 
-	table.insert(Queue, request)
-	return #Queue
+	table.insert(erlua.Queue, request)
+	return #erlua.Queue
 end
 
 function erlua:dump()
 	log("Scanning queue for a runnable request...", "info")
-	table.sort(Queue, function(a, b) return a.timestamp < b.timestamp end)
+	table.sort(erlua.Queue, function(a, b) return a.timestamp < b.timestamp end)
 
 	local now = realtime()
 	local idx, req, state
 
-	for i, oldest in ipairs(Queue) do
+	for i, oldest in ipairs(erlua.Queue) do
 		local b = (oldest.method == "POST" and "bucket-" .. oldest.serverKey) or (oldest.globalKey and "global") or "unauthenticated-global"
-		state = Ratelimits[b]
+		state = erlua.Ratelimits[b]
 
 		if not state or not state.updated or not state.retry or now >= (state.updated + state.retry) then
 			idx = i
@@ -156,7 +153,7 @@ function erlua:dump()
 
 	if not req then
 		local soonest = math.huge
-		for _, state in pairs(Ratelimits) do
+		for _, state in pairs(erlua.Ratelimits) do
 			if state.updated and state.retry then
 				local unblock = state.updated + state.retry
 				if unblock > now and unblock < soonest then soonest = unblock end
@@ -180,26 +177,25 @@ function erlua:dump()
 	local reset = header(headers, "X-RateLimit-Reset")
 
 	if bucket and remaining and reset then
-		Ratelimits[bucket] = {
+		erlua.Ratelimits[bucket] = {
 			updated = realtime(),
 			retry = response and response.retry_after,
 			remaining = tonumber(remaining),
 			reset = tonumber(reset)
 		}
 		log("The " .. (bucket:match("^(.-)%-") or bucket) .. " bucket has been updated: " .. remaining .. " left, resets in " .. (reset - os.time()) .. " seconds.")
-		_G.ERLUARateLimits = Ratelimits
 	end
 
 	if not ok and result.code == 429 then
 		log("The " .. (bucket or "unknown") .. " bucket has been ratelimited, requeueing request.", "warning")
 	else
-		table.remove(Queue, idx)
+		table.remove(erlua.Queue, idx)
 	end
 end
 
 coroutine.wrap(function()
 	while true do
-		if #Queue > 0 then erlua:dump() end
+		if #erlua.Queue > 0 then erlua:dump() end
 
 		timer.sleep(100)
 	end
