@@ -71,6 +71,10 @@ local function Error(code, message)
 	}
 end
 
+local function defer(fn)
+	timer.setTimeout(0, fn)
+end
+
 -- [[ ERLua Functions ]] --
 
 function erlua:SetGlobalKey(gk)
@@ -169,11 +173,11 @@ function erlua:dump()
 	if not req then return end
 
 	local ok, result, response = erlua:request(req.method, req.endpoint, req.body, req.callback, req.process, req.serverKey, req.globalKey)
-
-	local headers = result.headers or {}
-	local bucket = header(headers, "X-RateLimit-Bucket")
-	local remaining = header(headers, "X-RateLimit-Remaining")
-	local reset = header(headers, "X-RateLimit-Reset")
+	
+	local headers = result or {}
+	local bucket = header(result, "X-RateLimit-Bucket")
+	local remaining = header(result, "X-RateLimit-Remaining")
+	local reset = header(result, "X-RateLimit-Reset")
 
 	if bucket and remaining and reset then
 		Ratelimits[bucket] = {
@@ -358,20 +362,22 @@ end
 -- [[ Custom Functions ]] --
 
 function erlua.Staff(callback, serverKey, globalKey, preloadPlayers)
-	local function process(success, response)
+	local function process(success, response, result)
 		if success and response then
 			local staff = {}
 
 			for _, player in pairs(response) do if player.Permission and (player.Permission ~= "Normal") then table.insert(staff, player) end end
 
-			callback(success, staff)
+			callback(success, staff, result)
 		else
-			callback(success, response)
+			callback(success, response, result)
 		end
 	end
 
 	if preloadPlayers then
-		process(true, preloadPlayers)
+		defer(function()
+			process(true, preloadPlayers, {code = 200})
+		end)
 		return 0
 	else
 		return erlua.Players(process, serverKey, globalKey)
@@ -391,20 +397,22 @@ function erlua.Team(callback, serverKey, globalKey, teamName, preloadPlayers)
 		return 0
 	end
 
-	local function process(success, response)
+	local function process(success, response, result)
 		if success and response then
 			local team = {}
 
 			for _, player in pairs(response) do if player.Team and (player.Team:lower() == teamName:lower()) then table.insert(team, player) end end
 
-			callback(success, team)
+			callback(success, team, result)
 		else
-			callback(success, response)
+			callback(success, response, result)
 		end
 	end
 
 	if preloadPlayers then
-		process(true, preloadPlayers)
+		defer(function()
+			process(true, preloadPlayers, {code = 200, message = "Ok"})
+		end)
 		return 0
 	else
 		return erlua.Players(process, serverKey, globalKey)
@@ -412,7 +420,7 @@ function erlua.Team(callback, serverKey, globalKey, teamName, preloadPlayers)
 end
 
 function erlua.TrollUsernames(callback, serverKey, globalKey, preloadPlayers)
-	local function process(success, response)
+	local function process(success, response, result)
 		if success and response then
 			local trolls = {}
 
@@ -431,14 +439,16 @@ function erlua.TrollUsernames(callback, serverKey, globalKey, preloadPlayers)
 				end
 			end
 
-			callback(success, response)
+			callback(success, trolls, result)
 		else
-			callback(success, response)
+			callback(success, response, result)
 		end
 	end
 
 	if preloadPlayers then
-		process(true, preloadPlayers)
+		defer(function ()
+			process(true, preloadPlayers, {code = 200, message = "Ok"})
+		end)
 		return 0
 	else
 		return erlua.Players(process, serverKey, globalKey)
