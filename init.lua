@@ -1,9 +1,17 @@
 local erlua = {
 	GlobalKey = nil,
 	ServerKey = nil,
+	LogLevel = 0,
 	Requests = {},
 	Ratelimits = {}
 }
+
+--[[
+	Log Levels:
+	- Error = 2
+	- Warning = 1
+	- Info = 0
+]]
 
 local http = require("coro-http")
 local json = require("json")
@@ -23,14 +31,14 @@ local function log(text, mode)
 
 	local date = os.date("%x @ %I:%M:%S%p", os.time())
 
-	if mode == "success" then
+	if mode == "success" then -- unused??
 		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
-	elseif mode == "warning" then
+	elseif mode == "info" and not erlua.LogLevel > 0 then
+		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
+	elseif mode == "warning" and not erlua.LogLevel > 1 then
 		print(date .. " | \27[33m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "error" then
 		print(date .. " | \27[31m\27[1m[ERLUA]\27[0m | " .. text)
-	elseif mode == "info" then
-		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
 	end
 end
 
@@ -83,6 +91,23 @@ end
 function erlua:SetServerKey(sk)
 	erlua.ServerKey = sk
 	log("Set server key to [HIDDEN].", "info")
+	return erlua
+end
+
+function erlua:setLogLevel(logLevel)
+
+	if tonumber(logLevel) and tonumber(logLevel) >= 0 and tonumber(logLevel) < 3 then
+		erlua.LogLevel = tonumber(logLevel)
+	elseif type(logLevel) == "string" then
+		if logLevel:lower() == "info" then
+			erlua.LogLevel = 0
+		elseif logLevel:lower() == "warning" then
+			erlua.LogLevel = 1
+		elseif logLevel:lower() == "error" then
+			erlua.LogLevel = 2
+		end
+	end
+
 	return erlua
 end
 
