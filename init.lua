@@ -111,6 +111,7 @@ function erlua:request(method, endpoint, body, callback, process, serverKey, glo
 		})
 	end
 
+	log("Requesting " .. method .. " /" .. endpoint .. ".", "info")
 	local result, response = http.request(method, url, headers, (body and json.encode(body)) or nil)
 	response = response and json.decode(response)
 
@@ -189,6 +190,7 @@ function erlua:dump()
 	if not ok and result.code == 429 then
 		log("The " .. (bucket or "unknown") .. " bucket has been ratelimited, requeueing request.", "warning")
 	else
+		log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
 		table.remove(erlua.Requests, idx)
 	end
 end
