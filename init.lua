@@ -10,6 +10,8 @@ local timer = require("timer")
 local Queue = {}
 local Ratelimits = {}
 
+_G.ERLUARateLimits = Ratelimits
+
 --[[
 if not success or type(response) ~= "table" or response.code then
   return false, response
@@ -69,6 +71,10 @@ local function Error(code, message)
 	}
 end
 
+local function defer(fn)
+	timer.setTimeout(0, fn)
+end
+
 -- [[ ERLua Functions ]] --
 
 function erlua:SetGlobalKey(gk)
@@ -108,7 +114,7 @@ function erlua:request(method, endpoint, body, callback, process, serverKey, glo
 		})
 	end
 
-	local result, response = http.request(method, url, headers, (body and json.decode(body)) or nil)
+	local result, response = http.request(method, url, headers, (body and json.encode(body)) or nil)
 	response = response and json.decode(response)
 
 	if result.code == 200 then
@@ -141,7 +147,7 @@ function erlua:dump()
 		local b = (oldest.method == "POST" and "bucket-" .. oldest.serverKey) or (oldest.globalKey and "global") or "unauthenticated-global"
 		state = Ratelimits[b]
 
-		if not (state and state.updated and state.retry and now < (state.updated + state.retry)) then
+		if not state or not state.updated or not state.retry or now >= (state.updated + state.retry) then
 			idx = i
 			req = oldest
 			break
@@ -164,9 +170,11 @@ function erlua:dump()
 		return
 	end
 
-	local ok, result, response = erlua:request(req.method, req.endpoint, req.body, req.callback, req.process, req.serverKey, req.globalKey)
+	if not req then return end
 
-	local headers = result.headers or {}
+	local ok, result, response = erlua:request(req.method, req.endpoint, req.body, req.callback, req.process, req.serverKey, req.globalKey)
+	
+	local headers = result or {}
 	local bucket = header(headers, "X-RateLimit-Bucket")
 	local remaining = header(headers, "X-RateLimit-Remaining")
 	local reset = header(headers, "X-RateLimit-Reset")
@@ -178,7 +186,8 @@ function erlua:dump()
 			remaining = tonumber(remaining),
 			reset = tonumber(reset)
 		}
-		log("The " .. bucket .. "bucket has been updated: " .. remaining .. " left, resets in " .. (reset - os.time()) .. " seconds.")
+		log("The " .. (bucket:match("^(.-)%-") or bucket) .. " bucket has been updated: " .. remaining .. " left, resets in " .. (reset - os.time()) .. " seconds.")
+		_G.ERLUARateLimits = Ratelimits
 	end
 
 	if not ok and result.code == 429 then
@@ -192,7 +201,7 @@ coroutine.wrap(function()
 	while true do
 		if #Queue > 0 then erlua:dump() end
 
-		timer.sleep(500)
+		timer.sleep(100)
 	end
 end)()
 
@@ -352,28 +361,30 @@ end
 
 -- [[ Custom Functions ]] --
 
-function erlua.Staff(callback, preloadPlayers, serverKey, globalKey)
-	local function process(success, response)
+function erlua.Staff(callback, serverKey, globalKey, preloadPlayers)
+	local function process(success, response, result)
 		if success and response then
 			local staff = {}
 
 			for _, player in pairs(response) do if player.Permission and (player.Permission ~= "Normal") then table.insert(staff, player) end end
 
-			callback(success, staff)
+			callback(success, staff, result)
 		else
-			callback(success, response)
+			callback(success, response, result)
 		end
 	end
 
 	if preloadPlayers then
-		process(true, preloadPlayers)
+		defer(function()
+			process(true, preloadPlayers, {code = 200})
+		end)
 		return 0
 	else
 		return erlua.Players(process, serverKey, globalKey)
 	end
 end
 
-function erlua.Team(teamName, callback, preloadPlayers, serverKey, globalKey)
+function erlua.Team(callback, serverKey, globalKey, teamName, preloadPlayers)
 	if not teamName or (not table.find({
 		"civilian",
 		"police",
@@ -381,30 +392,35 @@ function erlua.Team(teamName, callback, preloadPlayers, serverKey, globalKey)
 		"fire",
 		"dot",
 		"jail"
-	}, teamName:lower())) then callback(false, Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided.")) end
+	}, teamName:lower())) then
+	 	callback(false, Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided."), Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided."))
+		return 0
+	end
 
-	local function process(success, response)
+	local function process(success, response, result)
 		if success and response then
 			local team = {}
 
 			for _, player in pairs(response) do if player.Team and (player.Team:lower() == teamName:lower()) then table.insert(team, player) end end
 
-			callback(success, team)
+			callback(success, team, result)
 		else
-			callback(success, response)
+			callback(success, response, result)
 		end
 	end
 
 	if preloadPlayers then
-		process(true, preloadPlayers)
+		defer(function()
+			process(true, preloadPlayers, {code = 200, message = "Ok"})
+		end)
 		return 0
 	else
 		return erlua.Players(process, serverKey, globalKey)
 	end
 end
 
-function erlua.TrollUsernames(callback, preloadPlayers, serverKey, globalKey)
-	local function process(success, response)
+function erlua.TrollUsernames(callback, serverKey, globalKey, preloadPlayers)
+	local function process(success, response, result)
 		if success and response then
 			local trolls = {}
 
@@ -423,14 +439,16 @@ function erlua.TrollUsernames(callback, preloadPlayers, serverKey, globalKey)
 				end
 			end
 
-			callback(success, response)
+			callback(success, trolls, result)
 		else
-			callback(success, response)
+			callback(success, response, result)
 		end
 	end
 
 	if preloadPlayers then
-		process(true, preloadPlayers)
+		defer(function ()
+			process(true, preloadPlayers, {code = 200, message = "Ok"})
+		end)
 		return 0
 	else
 		return erlua.Players(process, serverKey, globalKey)
