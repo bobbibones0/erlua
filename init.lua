@@ -345,7 +345,7 @@ function erlua.Bans(callback, serverKey, globalKey)
 	})
 end
 
-function erlua.Requests(callback, serverKey, globalKey)
+function erlua.Queue(callback, serverKey, globalKey)
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/queue",
