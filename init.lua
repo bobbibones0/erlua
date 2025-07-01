@@ -175,9 +175,9 @@ function erlua:dump()
 	local ok, result, response = erlua:request(req.method, req.endpoint, req.body, req.callback, req.process, req.serverKey, req.globalKey)
 	
 	local headers = result or {}
-	local bucket = header(result, "X-RateLimit-Bucket")
-	local remaining = header(result, "X-RateLimit-Remaining")
-	local reset = header(result, "X-RateLimit-Reset")
+	local bucket = header(headers, "X-RateLimit-Bucket")
+	local remaining = header(headers, "X-RateLimit-Remaining")
+	local reset = header(headers, "X-RateLimit-Reset")
 
 	if bucket and remaining and reset then
 		Ratelimits[bucket] = {
@@ -186,7 +186,7 @@ function erlua:dump()
 			remaining = tonumber(remaining),
 			reset = tonumber(reset)
 		}
-		log("The " .. bucket .. "bucket has been updated: " .. remaining .. " left, resets in " .. (reset - os.time()) .. " seconds.")
+		log("The " .. (bucket:match("^(.-)%-") or bucket) .. " bucket has been updated: " .. remaining .. " left, resets in " .. (reset - os.time()) .. " seconds.")
 		_G.ERLUARateLimits = Ratelimits
 	end
 
@@ -201,7 +201,7 @@ coroutine.wrap(function()
 	while true do
 		if #Queue > 0 then erlua:dump() end
 
-		timer.sleep(500)
+		timer.sleep(100)
 	end
 end)()
 
