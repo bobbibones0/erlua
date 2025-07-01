@@ -33,9 +33,9 @@ local function log(text, mode)
 
 	if mode == "success" then -- unused??
 		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
-	elseif mode == "info" and not erlua.LogLevel > 0 then
+	elseif mode == "info" and not (erlua.LogLevel > 0) then
 		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
-	elseif mode == "warning" and not erlua.LogLevel > 1 then
+	elseif mode == "warning" and not (erlua.LogLevel > 1) then
 		print(date .. " | \27[33m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "error" then
 		print(date .. " | \27[31m\27[1m[ERLUA]\27[0m | " .. text)
