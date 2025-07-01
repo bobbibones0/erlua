@@ -1,7 +1,7 @@
 local erlua = {
 	GlobalKey = nil,
 	ServerKey = nil,
-	Queue = {},
+	Requests = {},
 	Ratelimits = {}
 }
 
@@ -129,18 +129,18 @@ function erlua:queue(request)
 	log("Request " .. request.method .. " /" .. request.endpoint .. " queued.", "info")
 	request.timestamp = request.timestamp or os.time()
 
-	table.insert(erlua.Queue, request)
-	return #erlua.Queue
+	table.insert(erlua.Requests, request)
+	return #erlua.Requests
 end
 
 function erlua:dump()
 	log("Scanning queue for a runnable request...", "info")
-	table.sort(erlua.Queue, function(a, b) return a.timestamp < b.timestamp end)
+	table.sort(erlua.Requests, function(a, b) return a.timestamp < b.timestamp end)
 
 	local now = realtime()
 	local idx, req, state
 
-	for i, oldest in ipairs(erlua.Queue) do
+	for i, oldest in ipairs(erlua.Requests) do
 		local b = (oldest.method == "POST" and "bucket-" .. oldest.serverKey) or (oldest.globalKey and "global") or "unauthenticated-global"
 		state = erlua.Ratelimits[b]
 
@@ -189,13 +189,13 @@ function erlua:dump()
 	if not ok and result.code == 429 then
 		log("The " .. (bucket or "unknown") .. " bucket has been ratelimited, requeueing request.", "warning")
 	else
-		table.remove(erlua.Queue, idx)
+		table.remove(erlua.Requests, idx)
 	end
 end
 
 coroutine.wrap(function()
 	while true do
-		if #erlua.Queue > 0 then erlua:dump() end
+		if #erlua.Requests > 0 then erlua:dump() end
 
 		timer.sleep(100)
 	end
@@ -345,7 +345,7 @@ function erlua.Bans(callback, serverKey, globalKey)
 	})
 end
 
-function erlua.Queue(callback, serverKey, globalKey)
+function erlua.Requests(callback, serverKey, globalKey)
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/queue",
