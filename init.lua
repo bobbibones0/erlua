@@ -10,6 +10,8 @@ local timer = require("timer")
 local Queue = {}
 local Ratelimits = {}
 
+_G.ERLUARateLimits = Ratelimits
+
 --[[
 if not success or type(response) ~= "table" or response.code then
   return false, response
@@ -179,6 +181,7 @@ function erlua:dump()
 			reset = tonumber(reset)
 		}
 		log("The " .. bucket .. "bucket has been updated: " .. remaining .. " left, resets in " .. (reset - os.time()) .. " seconds.")
+		_G.ERLUARateLimits = Ratelimits
 	end
 
 	if not ok and result.code == 429 then
