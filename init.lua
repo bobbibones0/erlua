@@ -110,7 +110,7 @@ function erlua:request(method, endpoint, body, callback, process, serverKey, glo
 		})
 	end
 
-	local result, response = http.request(method, url, headers, (body and json.decode(body)) or nil)
+	local result, response = http.request(method, url, headers, (body and json.encode(body)) or nil)
 	response = response and json.decode(response)
 
 	if result.code == 200 then
@@ -143,7 +143,7 @@ function erlua:dump()
 		local b = (oldest.method == "POST" and "bucket-" .. oldest.serverKey) or (oldest.globalKey and "global") or "unauthenticated-global"
 		state = Ratelimits[b]
 
-		if not (state and state.updated and state.retry and now < (state.updated + state.retry)) then
+		if not state or not state.updated or not state.retry or now >= (state.updated + state.retry) then
 			idx = i
 			req = oldest
 			break
@@ -165,6 +165,8 @@ function erlua:dump()
 		end
 		return
 	end
+
+	if not req then return end
 
 	local ok, result, response = erlua:request(req.method, req.endpoint, req.body, req.callback, req.process, req.serverKey, req.globalKey)
 
@@ -355,7 +357,7 @@ end
 
 -- [[ Custom Functions ]] --
 
-function erlua.Staff(callback, preloadPlayers, serverKey, globalKey)
+function erlua.Staff(callback, serverKey, globalKey, preloadPlayers)
 	local function process(success, response)
 		if success and response then
 			local staff = {}
@@ -376,7 +378,7 @@ function erlua.Staff(callback, preloadPlayers, serverKey, globalKey)
 	end
 end
 
-function erlua.Team(teamName, callback, preloadPlayers, serverKey, globalKey)
+function erlua.Team(callback, serverKey, globalKey, teamName, preloadPlayers)
 	if not teamName or (not table.find({
 		"civilian",
 		"police",
@@ -384,7 +386,10 @@ function erlua.Team(teamName, callback, preloadPlayers, serverKey, globalKey)
 		"fire",
 		"dot",
 		"jail"
-	}, teamName:lower())) then callback(false, Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided.")) end
+	}, teamName:lower())) then
+	 	callback(false, Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided."), Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided."))
+		return 0
+	end
 
 	local function process(success, response)
 		if success and response then
@@ -406,7 +411,7 @@ function erlua.Team(teamName, callback, preloadPlayers, serverKey, globalKey)
 	end
 end
 
-function erlua.TrollUsernames(callback, preloadPlayers, serverKey, globalKey)
+function erlua.TrollUsernames(callback, serverKey, globalKey, preloadPlayers)
 	local function process(success, response)
 		if success and response then
 			local trolls = {}
