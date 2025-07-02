@@ -235,7 +235,7 @@ function erlua.Server(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback
 	})
 end
@@ -245,7 +245,7 @@ function erlua.Players(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/players",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback,
 		process = function(data)
 			local players = {}
@@ -273,7 +273,7 @@ function erlua.Vehicles(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/vehicles",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback
 	})
 end
@@ -283,7 +283,7 @@ function erlua.PlayerLogs(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/joinlogs",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback,
 		process = function(data)
 			table.sort(data, function(a, b)
@@ -304,7 +304,7 @@ function erlua.KillLogs(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/killlogs",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback,
 		process = function(data)
 			table.sort(data, function(a, b)
@@ -325,7 +325,7 @@ function erlua.CommandLogs(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/commandlogs",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback,
 		process = function(data)
 			table.sort(data, function(a, b)
@@ -346,7 +346,7 @@ function erlua.ModCalls(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/modcalls",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback,
 		process = function(data)
 			table.sort(data, function(a, b)
@@ -367,7 +367,7 @@ function erlua.Bans(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/bans",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback
 	})
 end
@@ -377,7 +377,7 @@ function erlua.Queue(callback, serverKey, globalKey)
 		method = "GET",
 		endpoint = "server/queue",
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback
 	})
 end
@@ -486,7 +486,7 @@ function erlua.Command(command, callback, serverKey, globalKey)
 			command = (command:sub(1, 1) == ":" and command) or (":" .. command)
 		},
 		serverKey = serverKey,
-		globalkey = globalKey,
+		globalKey = globalKey,
 		callback = callback
 	})
 end
