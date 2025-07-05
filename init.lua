@@ -77,7 +77,7 @@ end
 
 local function header(headers, name)
 	for _, header in pairs(headers) do
-		if header[1]:lower() == name:lower() then
+		if type(header) == "table" and type(header[1]) == "string" and header[1]:lower() == name:lower() then
 			return header[2]
 		end
 	end
@@ -97,8 +97,15 @@ local function Error(code, message)
 	}
 end
 
-local function defer(fn)
-	timer.setTimeout(0, fn)
+local function safeResume(co, ...)
+	if type(co) ~= "thread" then return false, "Invalid coroutine" end
+	if coroutine.status(co) ~= "suspended" then return false, "Coroutine not suspended" end
+
+	local ok, result = coroutine.resume(co, ...)
+	if not ok then
+		return false, result
+	end
+	return true, result
 end
 
 -- [[ ERLua Functions ]] --
@@ -243,9 +250,7 @@ function erlua:dump()
 		table.remove(erlua.Requests, idx)
 	end
 
-	if req.co and coroutine.status(req.co) == "suspended" then
-		coroutine.resume(req.co, ok, response, result)
-	end
+	safeResume(req.co, ok, response, result)
 end
 
 coroutine.wrap(function()
