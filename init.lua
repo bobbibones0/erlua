@@ -187,7 +187,7 @@ function erlua:dump()
 	local idx, req, state
 
 	for i, oldest in ipairs(erlua.Requests) do
-		local b = (oldest.method == "POST" and "command-" .. oldest.serverKey or "unauthorized")
+		local b = (oldest.method == "POST" and "command-" .. (oldest.serverKey or "unauthorized"))
 			or ((erlua.GlobalKey or oldest.globalKey) and "global")
 			or "unauthenticated-global"
 		state = erlua.Ratelimits[b]
