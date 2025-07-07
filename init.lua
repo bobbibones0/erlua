@@ -408,6 +408,15 @@ function erlua.Queue(serverKey, globalKey)
 	})
 end
 
+function erlua.Permissions(serverKey, globalKey)
+	return erlua:queue({
+		method = "GET",
+		endpoint = "server/staff",
+		serverKey = serverKey,
+		globalKey = globalKey,
+	})
+end
+
 -- [[ Custom Functions ]] --
 
 function erlua.Staff(serverKey, globalKey, preloadPlayers)
