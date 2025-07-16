@@ -248,9 +248,8 @@ function erlua:dump()
 	else
 		log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
 		table.remove(erlua.Requests, idx)
+		safeResume(req.co, ok, response, result)
 	end
-
-	safeResume(req.co, ok, response, result)
 end
 
 coroutine.wrap(function()
