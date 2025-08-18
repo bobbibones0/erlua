@@ -4,6 +4,7 @@ local erlua = {
 	LogLevel = 0,
 	Requests = {},
 	Ratelimits = {},
+	ActiveBuckets = {},
 	validTeams = {
 		civilian = true,
 		police = true,
@@ -41,12 +42,13 @@ local function log(text, mode)
 	local date = os.date("%x @ %I:%M:%S%p", os.time())
 
 	if mode == "success" then -- unused??
+		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "info" and not (erlua.LogLevel > 0) then
-		print(date .. " | [35m[1m[ERLUA][0m | " .. text)
+		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "warning" and not (erlua.LogLevel > 1) then
-		print(date .. " | [33m[1m[ERLUA][0m | " .. text)
+		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "error" then
-		print(date .. " | [31m[1m[ERLUA][0m | " .. text)
+		print(date .. " | \27[31m\27[1m[ERLUA]\27[0m | " .. text)
 	end
 end
 
