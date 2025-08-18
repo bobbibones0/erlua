@@ -178,77 +178,67 @@ function erlua:queue(request)
 end
 
 function erlua:dump()
-	log("Scanning queue for a runnable request...", "info")
+	log("Scanning queue for runnable requests...", "info")
 	table.sort(erlua.Requests, function(a, b)
 		return a.timestamp < b.timestamp
 	end)
 
 	local now = realtime()
-	local idx, req, state
+	local ranAny = false
+	local soonest = math.huge
 
-	for i, oldest in ipairs(erlua.Requests) do
-		local b = (oldest.method == "POST" and "command-" .. (oldest.serverKey or "unauthorized"))
-			or ((erlua.GlobalKey or oldest.globalKey) and "global")
+	local buckets = {}
+	for i, request in ipairs(erlua.Requests) do
+		local b = (request.method == "POST" and "command-" .. (request.serverKey or "unauthorized"))
+			or ((erlua.GlobalKey or request.globalKey) and "global")
 			or "unauthenticated-global"
-		state = erlua.Ratelimits[b]
 
-		if not state or not state.updated or not state.retry or now >= (state.updated + state.retry) then
-			idx = i
-			req = oldest
-			break
-		end
+		buckets[b] = buckets[b] or {}
+		table.insert(buckets[b], {i = i, req = request})
 	end
 
-	if not req then
-		local soonest = math.huge
-		for _, state in pairs(erlua.Ratelimits) do
-			if state.updated and state.retry then
+	for bucket, list in pairs(buckets) do
+		local state = erlua.Ratelimits[bucket]
+		local oldest = list[1]
+		if oldest then
+			if not state or not state.updated or not state.retry or now >= (state.updated + state.retry) then
+				local idx, req = oldest.i, oldest.req
+				local ok, result, response =
+					erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
+
+				local headers = result or {}
+				local remaining = header(headers, "X-RateLimit-Remaining")
+				local reset = header(headers, "X-RateLimit-Reset")
+
+				erlua.Ratelimits[bucket] = {
+					updated = realtime(),
+					retry = response and response.retry_after,
+					remaining = remaining and tonumber(remaining),
+					reset = reset and tonumber(reset),
+				}
+
+				if not ok and result.code == 429 then
+					log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
+				else
+					log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
+					table.remove(erlua.Requests, idx)
+					safeResume(req.co, ok, response, result)
+				end
+
+				ranAny = true
+			else
 				local unblock = state.updated + state.retry
 				if unblock > now and unblock < soonest then
 					soonest = unblock
 				end
 			end
 		end
-		if soonest < math.huge then
-			local wait = soonest - now
-			log("All buckets have been ratelimited, sleeping for " .. wait .. " seconds.", "warning")
-			timer.sleep(wait * 1000)
-		end
-		return
 	end
 
-	local ok, result, response =
-		erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
-
-	local headers = result or {}
-	local bucket = header(headers, "X-RateLimit-Bucket")
-	local remaining = header(headers, "X-RateLimit-Remaining")
-	local reset = header(headers, "X-RateLimit-Reset")
-
-	if bucket and remaining and reset then
-		erlua.Ratelimits[bucket] = {
-			updated = realtime(),
-			retry = response and response.retry_after,
-			remaining = tonumber(remaining),
-			reset = tonumber(reset),
-		}
-		log(
-			"The "
-				.. (bucket:match("^(.-)%-") or bucket)
-				.. " bucket has been updated: "
-				.. remaining
-				.. " left, resets in "
-				.. (reset - os.time())
-				.. " seconds."
-		)
-	end
-
-	if not ok and result.code == 429 then
-		log("The " .. (bucket or "unknown") .. " bucket has been ratelimited, requeueing request.", "warning")
-	else
-		log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
-		table.remove(erlua.Requests, idx)
-		safeResume(req.co, ok, response, result)
+	if not ranAny and soonest < math.huge then
+		local wait = soonest - now
+		log("All buckets ratelimited, sleeping for " .. wait .. " seconds.", "warning")
+		timer.sleep(wait * 1000)
 	end
 end
 
