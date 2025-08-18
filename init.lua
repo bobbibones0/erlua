@@ -41,13 +41,12 @@ local function log(text, mode)
 	local date = os.date("%x @ %I:%M:%S%p", os.time())
 
 	if mode == "success" then -- unused??
-		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "info" and not (erlua.LogLevel > 0) then
-		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
+		print(date .. " | [35m[1m[ERLUA][0m | " .. text)
 	elseif mode == "warning" and not (erlua.LogLevel > 1) then
-		print(date .. " | \27[33m\27[1m[ERLUA]\27[0m | " .. text)
+		print(date .. " | [33m[1m[ERLUA][0m | " .. text)
 	elseif mode == "error" then
-		print(date .. " | \27[31m\27[1m[ERLUA]\27[0m | " .. text)
+		print(date .. " | [31m[1m[ERLUA][0m | " .. text)
 	end
 end
 
@@ -173,78 +172,75 @@ function erlua:queue(request)
 	request.timestamp = request.timestamp or os.time()
 	request.co = coroutine.running()
 	assert(request.co, "erlua:queue must be called from inside a coroutine")
-	table.insert(erlua.Requests, request)
+
+	local b = (request.method == "POST" and "command-" .. (request.serverKey or "unauthorized"))
+		or ((erlua.GlobalKey or request.globalKey) and "global")
+		or "unauthenticated-global"
+
+	erlua.Requests[b] = erlua.Requests[b] or {}
+	table.insert(erlua.Requests[b], request)
+
 	return coroutine.yield()
 end
 
 function erlua:dump()
 	log("Scanning queue for runnable requests...", "info")
-	table.sort(erlua.Requests, function(a, b)
-		return a.timestamp < b.timestamp
-	end)
 
 	local now = realtime()
-	local ranAny = false
-	local soonest = math.huge
 
-	local buckets = {}
-	for i, request in ipairs(erlua.Requests) do
-		local b = (request.method == "POST" and "command-" .. (request.serverKey or "unauthorized"))
-			or ((erlua.GlobalKey or request.globalKey) and "global")
-			or "unauthenticated-global"
+	for bucket, list in pairs(erlua.Requests) do
+		if not erlua.ActiveBuckets[bucket] then
+			erlua.ActiveBuckets[bucket] = true
 
-		buckets[b] = buckets[b] or {}
-		table.insert(buckets[b], {i = i, req = request})
-	end
+			coroutine.wrap(function()
 
-	for bucket, list in pairs(buckets) do
-		local state = erlua.Ratelimits[bucket]
-		local oldest = list[1]
-		if oldest then
-			if not state or not state.updated or not state.retry or now >= (state.updated + state.retry) then
-				local idx, req = oldest.i, oldest.req
-				local ok, result, response =
-					erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
+				if list[1] then
+					table.sort(list, function(a, b)
+						return a.timestamp < b.timestamp
+					end)
 
-				local headers = result or {}
-				local remaining = header(headers, "X-RateLimit-Remaining")
-				local reset = header(headers, "X-RateLimit-Reset")
+					local state = erlua.Ratelimits[bucket]
+					local oldest = list[1]
 
-				erlua.Ratelimits[bucket] = {
-					updated = realtime(),
-					retry = response and response.retry_after,
-					remaining = remaining and tonumber(remaining),
-					reset = reset and tonumber(reset),
-				}
+					if oldest and (not state or not state.updated or not state.retry or now >= (state.updated + state.retry)) then
+						local req = oldest
+						local ok, result, response =
+							erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
 
-				if not ok and result.code == 429 then
-					log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
-				else
-					log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
-					table.remove(erlua.Requests, idx)
-					safeResume(req.co, ok, response, result)
+						local headers = result or {}
+						local remaining = header(headers, "X-RateLimit-Remaining")
+						local reset = header(headers, "X-RateLimit-Reset")
+
+						erlua.Ratelimits[bucket] = {
+							updated = realtime(),
+							retry = response and response.retry_after,
+							remaining = remaining and tonumber(remaining),
+							reset = reset and tonumber(reset),
+						}
+
+						if not ok and result.code == 429 then
+							log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
+						else
+							log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
+							table.remove(list, 1)
+							if #list == 0 then
+								erlua.Requests[bucket] = nil
+							end
+							safeResume(req.co, ok, response, result)
+						end
+					end
 				end
 
-				ranAny = true
-			else
-				local unblock = state.updated + state.retry
-				if unblock > now and unblock < soonest then
-					soonest = unblock
-				end
-			end
+				erlua.ActiveBuckets[bucket] = nil
+			end)()
+
 		end
-	end
-
-	if not ranAny and soonest < math.huge then
-		local wait = soonest - now
-		log("All buckets ratelimited, sleeping for " .. wait .. " seconds.", "warning")
-		timer.sleep(wait * 1000)
 	end
 end
 
 coroutine.wrap(function()
 	while true do
-		if #erlua.Requests > 0 then
+		if next(erlua.Requests) then
 			erlua:dump()
 		end
 
