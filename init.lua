@@ -156,16 +156,21 @@ function erlua:request(method, endpoint, body, process, serverKey, globalKey)
 	end
 
 	log("Requesting " .. method .. " /" .. endpoint .. ".", "info")
-	local result, response = http.request(method, url, headers, (body and json.encode(body)) or nil)
+	local ok, result, response = pcall(function()
+		return http.request(method, url, headers, (body and json.encode(body)) or nil)
+	end)
+
 	response = response and json.decode(response)
 
-	if result.code == 200 then
+	if ok and result.code == 200 then
 		if process then
 			response = process(response)
 		end
 		return true, result, response
-	else
+	elseif ok then
 		return false, result, response
+	else
+		return false, Error(500, "HTTP request attempt returned not ok."), Error(500, "HTTP request attempt returned not ok.")
 	end
 end
 
