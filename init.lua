@@ -245,15 +245,13 @@ function erlua:dump()
 	end
 end
 
-coroutine.wrap(function()
-	while true do
-		if next(erlua.Requests) then
-			erlua:dump()
-		end
+local dumpTimer = uv.new_timer()
 
-		timer.sleep(5)
+uv.timer_start(dumpTimer, 0, 5, function()
+	if next(erlua.Requests) then
+		erlua:dump()
 	end
-end)()
+end)
 
 -- [[ Endpoint Functions ]] --
 
