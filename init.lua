@@ -23,7 +23,7 @@ local erlua = {
 ]]
 
 local http = require("coro-http")
-local json = require("json")
+local lunajson = require("lunajson")
 local timer = require("timer")
 local uv = require("uv")
 
@@ -157,10 +157,10 @@ function erlua:request(method, endpoint, body, process, serverKey, globalKey)
 
 	log("Requesting " .. method .. " /" .. endpoint .. ".", "info")
 	local ok, result, response = pcall(function()
-		return http.request(method, url, headers, (body and json.encode(body)) or nil)
+		return http.request(method, url, headers, (body and lunajson.encode(body)) or nil)
 	end)
 
-	response = response and json.decode(response)
+	response = response and lunajson.decode(response)
 
 	if ok and result.code == 200 then
 		if process then
