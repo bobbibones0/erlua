@@ -4,6 +4,7 @@ local erlua = {
 	LogLevel = 0,
 	Requests = {},
 	Ratelimits = {},
+	ActiveBuckets = {},
 	validTeams = {
 		civilian = true,
 		police = true,
@@ -43,9 +44,9 @@ local function log(text, mode)
 	if mode == "success" then -- unused??
 		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "info" and not (erlua.LogLevel > 0) then
-		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
+		print(date .. " | \27[32m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "warning" and not (erlua.LogLevel > 1) then
-		print(date .. " | \27[33m\27[1m[ERLUA]\27[0m | " .. text)
+		print(date .. " | \27[35m\27[1m[ERLUA]\27[0m | " .. text)
 	elseif mode == "error" then
 		print(date .. " | \27[31m\27[1m[ERLUA]\27[0m | " .. text)
 	end
@@ -155,16 +156,22 @@ function erlua:request(method, endpoint, body, process, serverKey, globalKey)
 	end
 
 	log("Requesting " .. method .. " /" .. endpoint .. ".", "info")
-	local result, response = http.request(method, url, headers, (body and json.encode(body)) or nil)
+	local ok, result, response = pcall(function()
+		return http.request(method, url, headers, (body and json.encode(body)) or nil)
+	end)
+
 	response = response and json.decode(response)
 
-	if result.code == 200 then
+	if ok and result.code == 200 then
 		if process then
 			response = process(response)
 		end
 		return true, result, response
-	else
+	elseif ok then
 		return false, result, response
+	else
+		local errObject = Error(500, "HTTP request attempt returned not ok.")
+		return false, errObject, errObject
 	end
 end
 
@@ -173,94 +180,79 @@ function erlua:queue(request)
 	request.timestamp = request.timestamp or os.time()
 	request.co = coroutine.running()
 	assert(request.co, "erlua:queue must be called from inside a coroutine")
-	table.insert(erlua.Requests, request)
+
+	local b = (request.method == "POST" and "command-" .. (request.serverKey or "unauthorized"))
+		or ((erlua.GlobalKey or request.globalKey) and "global")
+		or "unauthenticated-global"
+
+	erlua.Requests[b] = erlua.Requests[b] or {}
+	table.insert(erlua.Requests[b], request)
+
 	return coroutine.yield()
 end
 
 function erlua:dump()
-	log("Scanning queue for a runnable request...", "info")
-	table.sort(erlua.Requests, function(a, b)
-		return a.timestamp < b.timestamp
-	end)
+	log("Scanning queue for runnable requests...", "info")
 
 	local now = realtime()
-	local idx, req, state
 
-	for i, oldest in ipairs(erlua.Requests) do
-		local b = (oldest.method == "POST" and "command-" .. (oldest.serverKey or "unauthorized"))
-			or ((erlua.GlobalKey or oldest.globalKey) and "global")
-			or "unauthenticated-global"
-		state = erlua.Ratelimits[b]
+	for bucket, list in pairs(erlua.Requests) do
+		if not erlua.ActiveBuckets[bucket] then
+			erlua.ActiveBuckets[bucket] = true
 
-		if not state or not state.updated or not state.retry or now >= (state.updated + state.retry) then
-			idx = i
-			req = oldest
-			break
-		end
-	end
+			coroutine.wrap(function()
 
-	if not req then
-		local soonest = math.huge
-		for _, state in pairs(erlua.Ratelimits) do
-			if state.updated and state.retry then
-				local unblock = state.updated + state.retry
-				if unblock > now and unblock < soonest then
-					soonest = unblock
+				if list[1] then
+					table.sort(list, function(a, b)
+						return a.timestamp < b.timestamp
+					end)
+
+					local state = erlua.Ratelimits[bucket]
+					local oldest = list[1]
+
+					if oldest and (not state or not state.updated or not state.retry or now >= (state.updated + state.retry)) then
+						local req = oldest
+						local ok, result, response =
+							erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
+
+						local headers = result or {}
+						local remaining = header(headers, "X-RateLimit-Remaining")
+						local reset = header(headers, "X-RateLimit-Reset")
+
+						erlua.Ratelimits[bucket] = {
+							updated = realtime(),
+							retry = response and response.retry_after,
+							remaining = remaining and tonumber(remaining),
+							reset = reset and tonumber(reset),
+						}
+
+						if not ok and result.code == 429 then
+							log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
+						else
+							log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
+							table.remove(list, 1)
+							if #list == 0 then
+								erlua.Requests[bucket] = nil
+							end
+							safeResume(req.co, ok, response, result)
+						end
+					end
 				end
-			end
+
+				erlua.ActiveBuckets[bucket] = nil
+			end)()
+
 		end
-		if soonest < math.huge then
-			local wait = soonest - now
-			log("All buckets have been ratelimited, sleeping for " .. wait .. " seconds.", "warning")
-			timer.sleep(wait * 1000)
-		end
-		return
-	end
-
-	local ok, result, response =
-		erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
-
-	local headers = result or {}
-	local bucket = header(headers, "X-RateLimit-Bucket")
-	local remaining = header(headers, "X-RateLimit-Remaining")
-	local reset = header(headers, "X-RateLimit-Reset")
-
-	if bucket and remaining and reset then
-		erlua.Ratelimits[bucket] = {
-			updated = realtime(),
-			retry = response and response.retry_after,
-			remaining = tonumber(remaining),
-			reset = tonumber(reset),
-		}
-		log(
-			"The "
-				.. (bucket:match("^(.-)%-") or bucket)
-				.. " bucket has been updated: "
-				.. remaining
-				.. " left, resets in "
-				.. (reset - os.time())
-				.. " seconds."
-		)
-	end
-
-	if not ok and result.code == 429 then
-		log("The " .. (bucket or "unknown") .. " bucket has been ratelimited, requeueing request.", "warning")
-	else
-		log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
-		table.remove(erlua.Requests, idx)
-		safeResume(req.co, ok, response, result)
 	end
 end
 
-coroutine.wrap(function()
-	while true do
-		if #erlua.Requests > 0 then
-			erlua:dump()
-		end
+local dumpTimer = uv.new_timer()
 
-		timer.sleep(5)
+uv.timer_start(dumpTimer, 0, 5, function()
+	if next(erlua.Requests) then
+		erlua:dump()
 	end
-end)()
+end)
 
 -- [[ Endpoint Functions ]] --
 
