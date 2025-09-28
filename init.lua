@@ -170,7 +170,8 @@ function erlua:request(method, endpoint, body, process, serverKey, globalKey)
 	elseif ok then
 		return false, result, response
 	else
-		return false, Error(500, "HTTP request attempt returned not ok."), Error(500, "HTTP request attempt returned not ok.")
+		local errObject = Error(500, "HTTP request attempt returned not ok.")
+		return false, errObject, errObject
 	end
 end
 
