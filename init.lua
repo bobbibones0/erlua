@@ -5,6 +5,7 @@ local erlua = {
 	Requests = {},
 	Ratelimits = {},
 	ActiveBuckets = {},
+	RequestOrigins = {},
 	validTeams = {
 		civilian = true,
 		police = true,
@@ -188,6 +189,10 @@ function erlua:queue(request)
 	erlua.Requests[b] = erlua.Requests[b] or {}
 	table.insert(erlua.Requests[b], request)
 
+	if request.origin then
+		erlua.RequestOrigins[request.origin] = (erlua.RequestOrigins[request.origin] and erlua.RequestOrigins[request.origin] + 1) or 0
+	end
+
 	return coroutine.yield()
 end
 
@@ -257,20 +262,40 @@ end)
 -- [[ Endpoint Functions ]] --
 
 function erlua.Server(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin
 	})
 end
 
 function erlua.Players(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/players",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin,
 		process = function(data)
 			local players = {}
 
@@ -293,20 +318,40 @@ function erlua.Players(serverKey, globalKey)
 end
 
 function erlua.Vehicles(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/vehicles",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin
 	})
 end
 
 function erlua.PlayerLogs(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/joinlogs",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin,
 		process = function(data)
 			table.sort(data, function(a, b)
 				if (not a.Timestamp) or not b.Timestamp then
@@ -322,11 +367,21 @@ function erlua.PlayerLogs(serverKey, globalKey)
 end
 
 function erlua.KillLogs(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/killlogs",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin,
 		process = function(data)
 			table.sort(data, function(a, b)
 				if (not a.Timestamp) or not b.Timestamp then
@@ -342,11 +397,21 @@ function erlua.KillLogs(serverKey, globalKey)
 end
 
 function erlua.CommandLogs(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/commandlogs",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin,
 		process = function(data)
 			table.sort(data, function(a, b)
 				if (not a.Timestamp) or not b.Timestamp then
@@ -362,11 +427,21 @@ function erlua.CommandLogs(serverKey, globalKey)
 end
 
 function erlua.ModCalls(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/modcalls",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin,
 		process = function(data)
 			table.sort(data, function(a, b)
 				if (not a.Timestamp) or not b.Timestamp then
@@ -382,29 +457,59 @@ function erlua.ModCalls(serverKey, globalKey)
 end
 
 function erlua.Bans(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/bans",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin
 	})
 end
 
 function erlua.Queue(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/queue",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin
 	})
 end
 
 function erlua.Permissions(serverKey, globalKey)
+	local debugInfo
+    for i = 1, 10 do
+        debugInfo = debug.getinfo(i, "Sl")
+        if (debugInfo) and (not debugInfo.short_src:lower():find("erlua")) and (debugInfo.what ~= "C") then
+            break
+        end
+    end
+	local origin = (debugInfo and (debugInfo.short_src .. ":" .. debugInfo.currentline)) or nil
+
 	return erlua:queue({
 		method = "GET",
 		endpoint = "server/staff",
 		serverKey = serverKey,
 		globalKey = globalKey,
+		origin = origin
 	})
 end
 
