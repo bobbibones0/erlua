@@ -205,46 +205,68 @@ function erlua:dump()
 		if not erlua.ActiveBuckets[bucket] then
 			erlua.ActiveBuckets[bucket] = true
 
+			local timeoutTimer
+			if bucket == "global" then
+				timeoutTimer = uv.new_timer()
+				uv.timer_start(timeoutTimer, 10000, 0, function()
+					if erlua.ActiveBuckets[bucket] then
+						Error("Timeout: Forcing unlock of bucket " .. tostring(bucket))
+						erlua.ActiveBuckets[bucket] = nil
+					end
+					uv.close(timeoutTimer)
+				end)
+			end
+
 			coroutine.wrap(function()
 
-				if list[1] then
-					table.sort(list, function(a, b)
-						return a.timestamp < b.timestamp
-					end)
+				local ok, err = pcall(function()
+					if list[1] then
+						table.sort(list, function(a, b)
+							return a.timestamp < b.timestamp
+						end)
 
-					local state = erlua.Ratelimits[bucket]
-					local oldest = list[1]
+						local state = erlua.Ratelimits[bucket]
+						local oldest = list[1]
 
-					if oldest and (not state or not state.updated or not state.retry or now >= (state.updated + state.retry)) then
-						local req = oldest
-						local ok, result, response =
-							erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
+						if oldest and (not state or not state.updated or not state.retry or now >= (state.updated + state.retry)) then
+							local req = oldest
+							local ok, result, response =
+								erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
 
-						local headers = result or {}
-						local remaining = header(headers, "X-RateLimit-Remaining")
-						local reset = header(headers, "X-RateLimit-Reset")
+							local headers = result or {}
+							local remaining = header(headers, "X-RateLimit-Remaining")
+							local reset = header(headers, "X-RateLimit-Reset")
 
-						erlua.Ratelimits[bucket] = {
-							updated = realtime(),
-							retry = response and response.retry_after,
-							remaining = remaining and tonumber(remaining),
-							reset = reset and tonumber(reset),
-						}
+							erlua.Ratelimits[bucket] = {
+								updated = realtime(),
+								retry = response and response.retry_after,
+								remaining = remaining and tonumber(remaining),
+								reset = reset and tonumber(reset),
+							}
 
-						if not ok and result.code == 429 then
-							log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
-						else
-							log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
-							table.remove(list, 1)
-							if #list == 0 then
-								erlua.Requests[bucket] = nil
+							if not ok and result.code == 429 then
+								log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
+							else
+								log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
+								table.remove(list, 1)
+								if #list == 0 then
+									erlua.Requests[bucket] = nil
+								end
+								safeResume(req.co, ok, response, result)
 							end
-							safeResume(req.co, ok, response, result)
 						end
 					end
-				end
+				end)
 
 				erlua.ActiveBuckets[bucket] = nil
+
+				if timeoutTimer and not uv.is_closing(timeoutTimer) then
+					uv.close(timeoutTimer)
+				end
+
+				if not ok then
+					Error("Error during bucket dump:", err)
+				end
 			end)()
 
 		end
