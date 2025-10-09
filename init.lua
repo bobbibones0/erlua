@@ -38,6 +38,7 @@ end
 --
 
 local function log(text, mode)
+	text = text or "no text provided"
 	mode = mode or "info"
 
 	local date = os.date("%x @ %I:%M:%S%p", os.time())
@@ -92,6 +93,7 @@ local function realtime()
 end
 
 local function Error(code, message)
+	message = message or "unknown error"
 	log(message, "error")
 	return {
 		code = code,
@@ -265,7 +267,7 @@ function erlua:dump()
 				end
 
 				if not ok then
-					Error("Error during bucket dump:", err)
+					Error(500, "Error during bucket dump: " .. tostring(err))
 				end
 			end)()
 
