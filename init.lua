@@ -212,7 +212,7 @@ function erlua:dump()
 				timeoutTimer = uv.new_timer()
 				uv.timer_start(timeoutTimer, 5000, 0, function()
 					if erlua.ActiveBuckets[bucket] then
-						Error("Timeout: Forcing unlock of bucket " .. tostring(bucket))
+						Error(500, "Timeout: Forcing unlock of bucket " .. tostring(bucket))
 						erlua.ActiveBuckets[bucket] = nil
 					end
 					uv.close(timeoutTimer)
