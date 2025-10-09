@@ -208,7 +208,7 @@ function erlua:dump()
 			local timeoutTimer
 			if bucket == "global" then
 				timeoutTimer = uv.new_timer()
-				uv.timer_start(timeoutTimer, 10000, 0, function()
+				uv.timer_start(timeoutTimer, 5000, 0, function()
 					if erlua.ActiveBuckets[bucket] then
 						Error("Timeout: Forcing unlock of bucket " .. tostring(bucket))
 						erlua.ActiveBuckets[bucket] = nil
