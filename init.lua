@@ -220,43 +220,46 @@ function erlua:dump()
 			end
 
 			coroutine.wrap(function()
+				local req = table.remove(list, 1)
+				if not req then
+					erlua.ActiveBuckets[bucket] = nil
+					if timeoutTimer and not uv.is_closing(timeoutTimer) then
+						uv.close(timeoutTimer)
+					end
+					return
+				end
 
 				local ok, err = pcall(function()
-					if list[1] then
-						table.sort(list, function(a, b)
-							return a.timestamp < b.timestamp
-						end)
+					local state = erlua.Ratelimits[bucket]
 
-						local state = erlua.Ratelimits[bucket]
-						local oldest = list[1]
+					if state and state.retry and now < (state.updated + state.retry) then
+						table.insert(list, 1, req)
+						return
+					end
 
-						if oldest and (not state or not state.updated or not state.retry or now >= (state.updated + state.retry)) then
-							local req = oldest
-							local ok, result, response =
-								erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
+					local ok, result, response =
+						erlua:request(req.method, req.endpoint, req.body, req.process, req.serverKey, req.globalKey)
 
-							local headers = result or {}
-							local remaining = header(headers, "X-RateLimit-Remaining")
-							local reset = header(headers, "X-RateLimit-Reset")
+					local headers = result or {}
+					local remaining = header(headers, "X-RateLimit-Remaining")
+					local reset = header(headers, "X-RateLimit-Reset")
 
-							erlua.Ratelimits[bucket] = {
-								updated = realtime(),
-								retry = response and response.retry_after,
-								remaining = remaining and tonumber(remaining),
-								reset = reset and tonumber(reset),
-							}
+					erlua.Ratelimits[bucket] = {
+						updated = realtime(),
+						retry = response and response.retry_after,
+						remaining = remaining and tonumber(remaining),
+						reset = reset and tonumber(reset),
+					}
 
-							if not ok and result.code == 429 then
-								log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
-							else
-								log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
-								table.remove(list, 1)
-								if #list == 0 then
-									erlua.Requests[bucket] = nil
-								end
-								safeResume(req.co, ok, response, result)
-							end
+					if not ok and result.code == 429 then
+						log("The " .. (bucket or "unknown") .. " bucket was ratelimited, requeueing.", "warning")
+						table.insert(list, 1, req)
+					else
+						log("Request " .. req.method .. " /" .. req.endpoint .. " fulfilled.")
+						if #list == 0 then
+							erlua.Requests[bucket] = nil
 						end
+						safeResume(req.co, ok, response, result)
 					end
 				end)
 
