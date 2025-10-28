@@ -207,25 +207,10 @@ function erlua:dump()
 		if bucket == "global" or not erlua.ActiveBuckets[bucket] then
 			erlua.ActiveBuckets[bucket] = true
 
-			local timeoutTimer
-			if bucket == "global" then
-				timeoutTimer = uv.new_timer()
-				uv.timer_start(timeoutTimer, 5000, 0, function()
-					if erlua.ActiveBuckets[bucket] then
-						Error(500, "Timeout: Forcing unlock of bucket " .. tostring(bucket))
-						erlua.ActiveBuckets[bucket] = nil
-					end
-					uv.close(timeoutTimer)
-				end)
-			end
-
 			coroutine.wrap(function()
 				local req = table.remove(list, 1)
 				if not req then
 					erlua.ActiveBuckets[bucket] = nil
-					if timeoutTimer and not uv.is_closing(timeoutTimer) then
-						uv.close(timeoutTimer)
-					end
 					return
 				end
 
@@ -264,10 +249,6 @@ function erlua:dump()
 				end)
 
 				erlua.ActiveBuckets[bucket] = nil
-
-				if timeoutTimer and not uv.is_closing(timeoutTimer) then
-					uv.close(timeoutTimer)
-				end
 
 				if not ok then
 					Error(500, "Error during bucket dump: " .. tostring(err))
