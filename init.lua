@@ -204,7 +204,7 @@ function erlua:dump()
 	local now = realtime()
 
 	for bucket, list in pairs(erlua.Requests) do
-		if not erlua.ActiveBuckets[bucket] then
+		if bucket == "global" or not erlua.ActiveBuckets[bucket] then
 			erlua.ActiveBuckets[bucket] = true
 
 			local timeoutTimer
