@@ -548,7 +548,7 @@ function erlua.Staff(serverKey, globalKey, preloadPlayers)
 end
 
 function erlua.Team(serverKey, globalKey, teamName, preloadPlayers)
-	if not teamName or not erlua.validTeams[teamName:lower()] then
+	if not teamName or not erlua.ValidTeams[teamName:lower()] then
 		return false, Error(400, "An invalid team name ('" .. tostring(teamName) .. "') was provided.")
 	end
 
