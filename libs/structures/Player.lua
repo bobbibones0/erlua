@@ -35,7 +35,7 @@ function get.id(self)
 end
 
 function get.profile(self)
-    return "https://roblox.com/users/" .. self._id .. "/profile"
+    return "<https://roblox.com/users/" .. self._id .. "/profile>"
 end
 
 function get.hyperlink(self)
