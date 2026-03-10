@@ -40,7 +40,6 @@ function Server:_load(data)
     local join_logs = setmetatable({}, { __mode = "v" })
     local command_logs = setmetatable({}, { __mode = "v" })
     local modcalls = setmetatable({}, { __mode = "v" })
-    local queue = setmetatable({}, { __mode = "v" })
     
     -- data.Players = data.Players or self._client._api:getServerPlayers(self._server_key)
     -- data.JoinLogs = data.JoinLogs or self._client._api:getServerJoinLogs(self._server_key)
@@ -117,7 +116,6 @@ function Server:_load(data)
     self._join_logs = join_logs
     self._command_logs = command_logs
     self._modcalls = modcalls
-    self._queue = queue
     self._last_updated = realtime()
 end
 
