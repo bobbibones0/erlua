@@ -82,7 +82,7 @@ function API:request(method, endpoint, payload, key, base)
 	if bucket.remaining <= 0 and bucket.reset > now then
 		local delay = (bucket.reset - now) * 1000
 		if self._client then
-			self._client:info("Bucket %s is ratelimited; waiting %.2fms", bucketName, delay)
+			self._client:info("Bucket %s is ratelimited, waiting %.2fms...", bucketName:sub(1, 10), delay)
 		end
 		timer.sleep(delay)
 		now = realtime()

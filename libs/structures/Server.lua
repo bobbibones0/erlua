@@ -136,6 +136,11 @@ function Server:refresh()
         return self:_load(data)
     else
         self._refreshing = false
+        if err:match("Invalid Server%-Key") then
+            self._invalid = true
+            self._client._servers[self._id] = nil
+        end
+        
         return false, err
     end
 end

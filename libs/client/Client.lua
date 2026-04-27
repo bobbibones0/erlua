@@ -62,13 +62,21 @@ function Client:_verifySignature(body, signature, timestamp)
 	return digest:verify(sig, timestamp .. body)
 end
 
-function Client:getServer(key)
-	local id = key:match("%-(.+)") or key
+function Client:getServer(query)
+	local type = query:match("%-(.+)") and "key" or "id"
+	local key = type == "key" and query
+	local id = type == "id" and query or query:match("%-(.+)")
+	local cached = self._servers[id]
+	
+	if key and cached and cached._server_key ~= key then
+		cached:refresh()
+		cached = self._servers[id]
+	end
 
-	if key:match("%-(.+)") and not self._servers[id] then
-		local data, err = self._api:getServer(key)
+	if key and not cached then
+		local data, err = self._api:getServer(key) -- fetch it using the key
 		if data and next(data) then
-			self._servers[id] = Server(self, key, data)
+			self._servers[id] = Server(self, key, data) -- cache it by id
 		else
 			return nil, err
 		end
