@@ -21,7 +21,7 @@ local API = require("class")("API")
 function API:__init(client, apiVersion)
 	self._client = client
 	self._api_version = apiVersion or 2
-	self._base_url = "https://api.policeroleplay.community/v" .. self._api_version
+	self._base_url = "https://api.erlc.gg/v" .. self._api_version
 	self._buckets = setmetatable({}, {
 		__mode = "v",
 		__index = function(self, k)
@@ -232,7 +232,7 @@ end
 
 function API:getServerBans(key)
 	local endpoint = string.format(endpoints.SERVER_BANS)
-	return self:request("GET", endpoint, nil, key, "https://api.policeroleplay.community/v1")
+	return self:request("GET", endpoint, nil, key, "https://api.erlc.gg/v1")
 end
 
 function API:getServerVehicles(key)
