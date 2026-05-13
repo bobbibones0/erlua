@@ -63,6 +63,10 @@ function Client:_verifySignature(body, signature, timestamp)
 end
 
 function Client:getServer(query)
+	if not query:match("%-(.+)") then
+		return nil, "Invalid API key provided"
+	end
+
 	local type = query:match("%-(.+)") and "key" or "id"
 	local key = type == "key" and query
 	local id = type == "id" and query or query:match("%-(.+)")
