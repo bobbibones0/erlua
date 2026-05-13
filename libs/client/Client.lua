@@ -63,30 +63,31 @@ function Client:_verifySignature(body, signature, timestamp)
 end
 
 function Client:getServer(query)
-	if not query:match("%-(.+)") then
-		return nil, "Invalid API key provided"
-	end
-
 	local type = query:match("%-(.+)") and "key" or "id"
 	local key = type == "key" and query
-	local id = type == "id" and query or query:match("%-(.+)")
-	local cached = self._servers[id]
-	
-	if key and cached and cached._server_key ~= key then
-		cached:refresh()
-		cached = self._servers[id]
-	end
 
-	if key and not cached then
-		local data, err = self._api:getServer(key) -- fetch it using the key
-		if data and next(data) then
-			self._servers[id] = Server(self, key, data) -- cache it by id
-		else
-			return nil, err
+	if key then
+		local id = type == "id" and query or query:match("%-(.+)")
+		local cached = self._servers[id]
+
+		if key and cached and cached._server_key ~= key then
+			cached:refresh()
+			cached = self._servers[id]
 		end
-	end
 
-	return self._servers[id]
+		if key and not cached then
+			local data, err = self._api:getServer(key) -- fetch it using the key
+			if data and next(data) then
+				self._servers[id] = Server(self, key, data) -- cache it by id
+			else
+				return nil, err
+			end
+		end
+
+		return self._servers[id]
+	else
+		return nil, "Invalid API key provided"
+	end
 end
 
 function Client:handleWebhook(body, signature, timestamp)
